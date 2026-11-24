@@ -41,5 +41,24 @@ Aturan penting:
 - Pastikan JSON valid (koma antar objek, tanpa koma di akhir).
 - Verifikasi collocations di Cambridge Dictionary atau Oxford Collocations Dictionary sebelum dipakai untuk Writing.
 
-## Progress
-Tersimpan di browser (localStorage), per perangkat. Untuk pindah perangkat, buka tab **Statistik**, salin teks Backup, lalu tempel di perangkat lain dan klik **Pulihkan**.
+## Struktur
+```
+index.html, style.css
+js/app.js      mulai aplikasi
+js/ui.js       tampilan dan interaksi
+js/srs.js      logika spaced repetition
+js/store.js    penyimpanan lokal + sinkron Supabase
+js/config.js   URL dan anon key Supabase (isi sendiri)
+data/words.json   wordlist
+supabase/schema.sql   tabel dan aturan keamanan
+```
+
+## Sinkron dengan Supabase (opsional)
+Tanpa Supabase, progress tersimpan di browser (per perangkat). Dengan Supabase, progress ikut ke semua perangkat.
+1. Buat project di supabase.com.
+2. Buka **SQL Editor**, tempel isi `supabase/schema.sql`, lalu Run (cukup sekali).
+3. Buka **Project Settings > API**, salin Project URL dan anon (publishable) key ke `js/config.js`. Jangan pernah memakai service_role key di sini. Anon key aman terlihat di browser hanya karena Row Level Security di schema.sql aktif.
+4. Di **Authentication > URL Configuration**, isi Site URL dengan alamat GitHub Pages-mu. Untuk pemakaian pribadi, kamu boleh mematikan "Confirm email" di pengaturan provider Email supaya bisa langsung masuk setelah daftar.
+5. Unggah ke GitHub, buka aplikasi, lalu tab **Akun**: Daftar atau Masuk. Progress lokal yang sudah ada otomatis digabung dengan data cloud (yang paling baru menang per kartu).
+
+Perubahan saat offline disimpan dulu dan dikirim otomatis saat online lagi. Kolom `limit` (kata baru per hari) tersimpan di cloud dan bisa diubah lewat `S.limit` di `store.js` (nilai awal 5).
