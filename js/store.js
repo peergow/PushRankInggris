@@ -3,7 +3,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 
 const KEY = "ielts-vocab-v3", OLD_KEY = "ielts-vocab-v2";
 const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
-const blank = () => ({ c: {}, st: 0, last: "", n: {}, limit: 5, su: 0, dirty: [] });
+const blank = () => ({ c: {}, st: 0, last: "", n: {}, limit: 5, su: 0, dirty: [], del: [] });
 
 let S = blank(), sb = null, user = null;
 export const get = () => S;
@@ -47,9 +47,14 @@ export async function signOut() { await sb.auth.signOut(); user = null; }
 const cardRow = (w) => ({ user_id: user.id, word: w, box: S.c[w].box, due: S.c[w].due, updated_at: new Date(S.c[w].u).toISOString() });
 
 export async function flush() {
-  if (!sb || !user || !S.dirty.length) return true;
+  if (!sb || !user || (!S.dirty.length && !S.del.length)) return true;
   const batch = [...S.dirty], words = batch.filter((k) => k !== "__state");
   try {
+    const dels = [...S.del];
+    if (dels.length) {
+      const { error } = await sb.from("card_progress").delete().eq("user_id", user.id).in("word", dels);
+      if (error) throw error;
+    }
     if (words.length) {
       const { error } = await sb.from("card_progress").upsert(words.map(cardRow), { onConflict: "user_id,word" });
       if (error) throw error;
@@ -60,6 +65,7 @@ export async function flush() {
       if (error) throw error;
     }
     S.dirty = S.dirty.filter((k) => !batch.includes(k));
+    S.del = S.del.filter((k) => !dels.includes(k));
     persist();
     return true;
   } catch (e) { console.warn("Sinkron gagal:", e); return false; }
@@ -74,6 +80,7 @@ async function pull() {
   if (a.error || b.error) throw a.error || b.error;
   const remote = {};
   a.data.forEach((r) => {
+    if (S.del.includes(r.word)) return; // sudah dihapus lokal, tunggu terkirim
     const t = Date.parse(r.updated_at);
     remote[r.word] = t;
     if (!S.c[r.word] || S.c[r.word].u < t) S.c[r.word] = { box: r.box, due: r.due, u: t };
@@ -85,11 +92,19 @@ async function pull() {
   await flush();
 }
 
-export function setCard(word, box, due) { S.c[word] = { box, due, u: Date.now() }; mark(word); persist(); flush(); }
+export function setCard(word, box, due) { S.del = S.del.filter((k) => k !== word); S.c[word] = { box, due, u: Date.now() }; mark(word); persist(); flush(); }
 export function setMeta(patch) { Object.assign(S, patch, { su: Date.now() }); mark("__state"); persist(); flush(); }
 
+// Batalkan kartu yang baru dipelajari (untuk tombol Kembali).
+export function removeCard(word) {
+  delete S.c[word];
+  S.dirty = S.dirty.filter((k) => k !== word);
+  if (!S.del.includes(word)) S.del.push(word);
+  persist(); flush();
+}
+
 export function importState(obj) {
-  S = { ...blank(), ...obj, dirty: [] };
+  S = { ...blank(), ...obj, dirty: [], del: [] };
   for (const w in S.c) { S.c[w].u = Date.now(); mark(w); }
   mark("__state"); persist(); flush();
 }
